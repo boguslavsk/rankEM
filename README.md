@@ -1,2 +1,2 @@
 # rankEM
-A simple Expectation-Maximization solutions to a student ranking problem
+A simple Expectation-Maximization solution to a student ranking problem
