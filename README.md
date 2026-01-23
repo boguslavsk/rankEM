@@ -55,20 +55,20 @@ To solve the "Bias Trap," we employ a **Regularized Expectation-Maximization (EM
 2.  **M-Step (Maximization/Estimation):**
     Calculate the parameters $\theta_i$ and $\beta_j$ that minimize the prediction error on the *observed* data. We apply **Regularization** (Ridge/L2 penalty) to handle the error term $\epsilon$ and prevent overfitting on students with few data points.
 
-    $$
+$$
     \theta_i = \frac{\sum_{j \in \text{Observed}} (X_{ij} - \mu - \beta_j)}{N_i + \lambda}
-    $$
+$$
 
     Where $N_i$ is the count of problems student $i$ solved, and $\lambda$ is the regularization term.
 
-3.  **E-Step (Expectation/Imputation):**
+4.  **E-Step (Expectation/Imputation):**
     Update the values for the missing entries based on the newly estimated parameters:
 
     $$
     X_{ij}^{\text{missing}} = \mu + \theta_i + \beta_j
     $$
 
-4.  **Convergence:**
+5.  **Convergence:**
     Repeat steps 2 and 3 until the parameters stabilize (change $< 10^{-4}$).
 
 ### Why EM Outperforms Heuristics
