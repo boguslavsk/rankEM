@@ -20,7 +20,7 @@ Where:
 * $\mu$: The global average score across all observations.
 * $\theta_i$: **Student Ability** (deviation from the global mean). Positive values indicate higher-than-average performance.
 * $\beta_j$: **Problem "Easiness"** (deviation from the global mean). Positive values indicate an easier problem; negative values indicate a harder one.
-* $\epsilon_{ij}$: A stochastic error term representing noise (luck, careless mistakes, etc.), assumed to follow a Gaussian distribution $\epsilon_{ij} \sim \mathcal{N}(0, \sigma^2)$. We also assume that $\epsilon_{ij} are independent from each other, from $\theta$, $\beta$, and from the missing data distribution.
+* $\epsilon_{ij}$: A stochastic error term representing noise (luck, careless mistakes, etc.), assumed to follow a Gaussian distribution $\epsilon_{ij} \sim \mathcal{N}(0, \sigma^2)$. We also assume that $\epsilon_{ij}$ are independent from each other, from $\theta$, $\beta$, and from the missing data distribution.
 
 ## 3. Heuristic Alternatives
 
