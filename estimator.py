@@ -24,16 +24,19 @@ class Estimator:
         self.mu: Optional[float] = None
     
     @classmethod
-    def em(cls, X: np.ndarray, reg_lambda: float = 1.0,
+    def em(cls, X: np.ndarray, lambda_theta: float = 1.0, lambda_beta: float = 1.0,
            max_iter: int = 100, tol: float = 1e-4) -> 'Estimator':
         """
-        Regularized EM (Alternating Least Squares) algorithm.
+        Regularized EM (Alternating Least Squares) algorithm with L2 penalties.
         
         Fits the additive model: X_ij = mu + theta_i + beta_j + epsilon_ij
         
+        Minimizes: sum((X_ij - theta_i - beta_j)^2) + lambda_theta * sum(theta_i^2) + lambda_beta * sum(beta_j^2)
+        
         Args:
             X: Score matrix with NaN for missing values
-            reg_lambda: Regularization parameter (shrinks theta and beta toward 0)
+            lambda_theta: L2 regularization parameter for theta (student abilities)
+            lambda_beta: L2 regularization parameter for beta (problem difficulties)
             max_iter: Maximum iterations
             tol: Convergence tolerance
             
@@ -59,12 +62,16 @@ class Estimator:
             beta_old = beta.copy()
             
             # Update Theta (student abilities)
+            # Minimizing sum_j (X_ij - mu - theta_i - beta_j)^2 + lambda_theta * theta_i^2
+            # Optimal: theta_i = sum_j(X_ij - mu - beta_j) / (n_obs_i + lambda_theta)
             res_theta = X_work - mu - beta[np.newaxis, :]
-            theta = np.nansum(res_theta, axis=1) / (n_obs_student + reg_lambda)
+            theta = np.nansum(res_theta, axis=1) / (n_obs_student + lambda_theta)
             
             # Update Beta (problem difficulties)
+            # Minimizing sum_i (X_ij - mu - theta_i - beta_j)^2 + lambda_beta * beta_j^2
+            # Optimal: beta_j = sum_i(X_ij - mu - theta_i) / (n_obs_j + lambda_beta)
             res_beta = X_work - mu - theta[:, np.newaxis]
-            beta = np.nansum(res_beta, axis=0) / (n_obs_problem + reg_lambda)
+            beta = np.nansum(res_beta, axis=0) / (n_obs_problem + lambda_beta)
             
             # Check convergence
             diff = np.linalg.norm(theta - theta_old) + np.linalg.norm(beta - beta_old)
@@ -83,12 +90,13 @@ class Estimator:
         return instance
     
     @classmethod
-    def day_linking(cls, X: np.ndarray, groups: List[np.ndarray]) -> 'Estimator':
+    def chain_linking(cls, X: np.ndarray, groups: List[np.ndarray]) -> 'Estimator':
         """
-        Day-linking heuristic estimator.
+        Chain-linking heuristic estimator.
         
-        Uses group × day means and linear algebra to estimate parameters,
-        assuming each group worked on different problems on different days.
+        Uses group × day means and linear algebra to estimate both group effects
+        and day effects, assuming each group worked on different problems on 
+        different days. Solves a linear system to separate the effects.
         
         Args:
             X: Score matrix with NaN for missing values
@@ -187,6 +195,71 @@ class Estimator:
         
         # Imputation
         X_filled = row_means[:, np.newaxis] + col_means[np.newaxis, :] - mu
+        X_filled = np.clip(X_filled, 0, 6)
+        
+        instance.theta = theta_est
+        instance.beta = beta_est
+        instance.X_imputed = X_filled
+        instance.mu = mu
+        
+        return instance
+    
+    @classmethod
+    def day_average(cls, X: np.ndarray, n_blocks: int = 3) -> 'Estimator':
+        """
+        Day-average heuristic estimator.
+        
+        A simple heuristic that:
+        1. For each block (day), computes the average observed score
+        2. Rescales all days to a common average (the global mean)
+        3. Estimates theta_i as the mean of rescaled scores for student i
+        
+        This is simpler than chain_linking as it doesn't require group structure.
+        
+        Args:
+            X: Score matrix with NaN for missing values
+            n_blocks: Number of day blocks (default 3)
+            
+        Returns:
+            Estimator with fitted parameters
+        """
+        instance = cls()
+        n_students, n_problems = X.shape
+        block_size = n_problems // n_blocks
+        
+        # Global mean for rescaling target
+        mu = np.nanmean(X)
+        
+        # Compute day means (average score in each block)
+        day_means = np.zeros(n_blocks)
+        for d in range(n_blocks):
+            start_col = block_size * d
+            end_col = n_problems if d == n_blocks - 1 else block_size * (d + 1)
+            block = X[:, start_col:end_col]
+            day_means[d] = np.nanmean(block)
+        
+        # Beta: day effect relative to global mean
+        # (problems in harder days have lower mean -> lower beta)
+        beta_est = np.zeros(n_problems)
+        for d in range(n_blocks):
+            start_col = block_size * d
+            end_col = n_problems if d == n_blocks - 1 else block_size * (d + 1)
+            # Day effect is how much this day differs from global mean
+            beta_est[start_col:end_col] = day_means[d] - mu
+        
+        # Rescale X so all days have the same mean
+        # X_rescaled[i,j] = X[i,j] - day_mean[d] + global_mean = X[i,j] - beta[j]
+        X_rescaled = X.copy()
+        for d in range(n_blocks):
+            start_col = block_size * d
+            end_col = n_problems if d == n_blocks - 1 else block_size * (d + 1)
+            X_rescaled[:, start_col:end_col] = X[:, start_col:end_col] - (day_means[d] - mu)
+        
+        # Theta: mean rescaled score for each student (relative to global mean)
+        theta_est = np.nanmean(X_rescaled, axis=1) - mu
+        
+        # Imputation
+        X_filled = mu + theta_est[:, np.newaxis] + beta_est[np.newaxis, :]
         X_filled = np.clip(X_filled, 0, 6)
         
         instance.theta = theta_est

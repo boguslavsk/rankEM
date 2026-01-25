@@ -40,9 +40,9 @@ def run_study(problem_type='block'):
             # Run each estimator
             for name in methods:
                 if name == 'EM':
-                    est = Estimator.em(X_miss, reg_lambda=0.0)
+                    est = Estimator.em(X_miss, lambda_theta=0.0, lambda_beta=0.0)
                 elif name == 'Day':
-                    est = Estimator.day_linking(X_miss, groups)
+                    est = Estimator.chain_linking(X_miss, groups)
                 else:  # 'Imp'
                     est = Estimator.mean_imputation(X_miss)
                 
