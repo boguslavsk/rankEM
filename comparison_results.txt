@@ -1,7 +1,0 @@
-
-Ranking Performance (Correlation with True Theta):
---------------------------------------------------
-1. EM (Baseline):                 0.95614
-2. Day-Linking Heuristic:         0.95614
-3. Mean Imputation (One-Step):    0.95885
---------------------------------------------------
