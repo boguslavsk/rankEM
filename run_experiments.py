@@ -988,6 +988,164 @@ def generate_comprehensive_report(exp1_file: str = 'results/experiment_results.c
     return output_file
 
 
+def run_convergence_study(output_file: str = 'results/convergence_study.csv'):
+    """
+    Study EM convergence rate across different sigma values and missing data proportions.
+    
+    Uses same parameter ranges as other experiments:
+    - sigma: [0.5, 1.5, 3.5, 6.0]
+    - additional_missing_rates: [0.0, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70]
+    - seeds: 50
+    
+    Output: CSV with iteration counts for each (seed, sigma, missing_rate) combination
+    """
+    
+    # Experimental factors (same as other experiments)
+    sigmas = [0.5, 1.5, 3.5, 6.0]
+    additional_missing_rates = [0.0, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70]
+    n_seeds = 50
+    
+    # Fixed parameters
+    n_students = 60
+    n_problems = 24
+    n_blocks = 3
+    
+    # CSV header
+    fieldnames = [
+        'seed', 'sigma', 'additional_missing_rate', 'total_missing_rate', 'n_iterations'
+    ]
+    
+    total_runs = len(sigmas) * len(additional_missing_rates) * n_seeds
+    print(f"Starting EM convergence study: {total_runs} total runs")
+    print(f"Output file: {output_file}")
+    print("=" * 70)
+    
+    with open(output_file, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        
+        run_count = 0
+        for sigma in sigmas:
+            for add_miss in additional_missing_rates:
+                # Determine pattern to use
+                if add_miss == 0.0:
+                    pattern = 'block'
+                else:
+                    pattern = 'both'
+                
+                for seed in range(n_seeds):
+                    # Generate data with block + optional scattered missing
+                    dg = DataGenerator.from_simulation(
+                        n_students=n_students,
+                        n_problems=n_problems,
+                        seed=seed,
+                        sigma=sigma,
+                        problem_type='block',
+                        n_blocks=n_blocks
+                    ).apply_missing(
+                        pattern=pattern,
+                        correlation='none',
+                        missing_rate=add_miss,
+                        correlation_strength=0.0,
+                        n_blocks=n_blocks
+                    )
+                    
+                    X_miss = dg.X_missing
+                    total_missing_rate = dg.missing_rate_actual
+                    
+                    # Run EM with no regularization to get true convergence behavior
+                    est = Estimator.em(X_miss, lambda_theta=0.0, lambda_beta=0.0)
+                    
+                    # Write row
+                    row = {
+                        'seed': seed,
+                        'sigma': sigma,
+                        'additional_missing_rate': add_miss,
+                        'total_missing_rate': round(total_missing_rate, 4),
+                        'n_iterations': est.n_iterations
+                    }
+                    writer.writerow(row)
+                    run_count += 1
+            
+            # Progress update after each sigma
+            pct = 100 * run_count / total_runs
+            print(f"  Sigma={sigma}: {run_count}/{total_runs} ({pct:.1f}%)")
+    
+    print("\n" + "=" * 70)
+    print(f"Convergence study complete. Results saved to: {output_file}")
+    print(f"Total runs: {run_count}")
+    
+    # Print summary
+    print_convergence_summary(output_file)
+
+
+def print_convergence_summary(input_file: str = 'results/convergence_study.csv'):
+    """Print summary of EM convergence rates by sigma and missing rate."""
+    import pandas as pd
+    
+    df = pd.read_csv(input_file)
+    
+    print("\n" + "=" * 80)
+    print("EM CONVERGENCE RATE STUDY")
+    print("=" * 80)
+    
+    # Aggregate by (sigma, additional_missing_rate)
+    summary = df.groupby(['sigma', 'additional_missing_rate']).agg({
+        'total_missing_rate': 'mean',
+        'n_iterations': ['min', 'max', 'mean', 'std']
+    }).round(2)
+    
+    summary.columns = ['total_miss_rate', 'iter_min', 'iter_max', 'iter_mean', 'iter_std']
+    summary = summary.reset_index()
+    
+    print("\nIteration counts by (sigma, missing rate):")
+    print("-" * 85)
+    print(f"{'σ':>6} | {'Add.Miss':>8} | {'Tot.Miss':>8} | {'Min':>5} | {'Max':>5} | {'Mean':>7} | {'Std':>6}")
+    print("-" * 85)
+    
+    for _, row in summary.iterrows():
+        print(f"{row['sigma']:>6.1f} | {row['additional_missing_rate']:>7.0%} | "
+              f"{row['total_miss_rate']:>7.1%} | {row['iter_min']:>5.0f} | "
+              f"{row['iter_max']:>5.0f} | {row['iter_mean']:>7.1f} | {row['iter_std']:>6.2f}")
+    
+    print("-" * 85)
+    
+    # Summary by sigma only
+    print("\nSummary by sigma (across all missing rates):")
+    print("-" * 60)
+    sigma_summary = df.groupby('sigma').agg({
+        'n_iterations': ['min', 'max', 'mean']
+    }).round(2)
+    sigma_summary.columns = ['min', 'max', 'mean']
+    
+    print(f"{'σ':>6} | {'Range':<15} | {'Mean':>7}")
+    print("-" * 60)
+    for sigma in sorted(df['sigma'].unique()):
+        row = sigma_summary.loc[sigma]
+        print(f"{sigma:>6.1f} | {int(row['min']):>3} - {int(row['max']):<8} | {row['mean']:>7.1f}")
+    
+    print("-" * 60)
+    
+    # Summary by missing rate only
+    print("\nSummary by missing rate (across all sigmas):")
+    print("-" * 60)
+    miss_summary = df.groupby('additional_missing_rate').agg({
+        'total_missing_rate': 'mean',
+        'n_iterations': ['min', 'max', 'mean']
+    }).round(2)
+    miss_summary.columns = ['total_miss', 'min', 'max', 'mean']
+    
+    print(f"{'Add.Miss':>8} | {'Tot.Miss':>8} | {'Range':<15} | {'Mean':>7}")
+    print("-" * 60)
+    for add_rate in sorted(df['additional_missing_rate'].unique()):
+        row = miss_summary.loc[add_rate]
+        print(f"{add_rate:>7.0%} | {row['total_miss']:>7.1%} | {int(row['min']):>3} - {int(row['max']):<8} | {row['mean']:>7.1f}")
+    
+    print("-" * 60)
+    
+    return summary
+
+
 if __name__ == "__main__":
     run_experiments()
     print_summary()

@@ -14,7 +14,10 @@ class Estimator:
         theta: Estimated student abilities
         beta: Estimated problem difficulties
         X_imputed: Imputed matrix (missing values filled in)
-        mu: Global mean (EM method only)
+        mu: Global mean
+        std_theta: Estimated standard deviation of theta
+        std_beta: Estimated standard deviation of beta
+        sigma_epsilon: Estimated standard deviation of residuals (epsilon)
     """
     
     def __init__(self):
@@ -22,6 +25,10 @@ class Estimator:
         self.beta: Optional[np.ndarray] = None
         self.X_imputed: Optional[np.ndarray] = None
         self.mu: Optional[float] = None
+        self.std_theta: Optional[float] = None
+        self.std_beta: Optional[float] = None
+        self.sigma_epsilon: Optional[float] = None
+        self.n_iterations: Optional[int] = None
     
     @classmethod
     def em(cls, X: np.ndarray, lambda_theta: float = 1.0, lambda_beta: float = 1.0,
@@ -78,9 +85,21 @@ class Estimator:
             if diff < tol:
                 break
         
+        # Store iteration count
+        instance.n_iterations = iteration + 1
+        
         # Final imputation
         X_filled = mu + theta[:, np.newaxis] + beta[np.newaxis, :]
         X_filled = np.clip(X_filled, 0, 6)
+        
+        # Compute variability estimates
+        instance.std_theta = np.std(theta, ddof=1)
+        instance.std_beta = np.std(beta, ddof=1)
+        
+        # Estimate sigma_epsilon from residuals on observed values
+        residuals = X_work - (mu + theta[:, np.newaxis] + beta[np.newaxis, :])
+        observed_residuals = residuals[observed_mask]
+        instance.sigma_epsilon = np.std(observed_residuals, ddof=1)
         
         instance.theta = theta
         instance.beta = beta
@@ -164,6 +183,16 @@ class Estimator:
         X_filled = theta_est[:, np.newaxis] + beta_est[np.newaxis, :]
         X_filled = np.clip(X_filled, 0, 6)
         
+        # Compute variability estimates
+        instance.std_theta = np.std(theta_est, ddof=1)
+        instance.std_beta = np.std(beta_est, ddof=1)
+        
+        # Estimate sigma_epsilon from residuals on observed values
+        observed_mask = ~np.isnan(X)
+        residuals = X - (theta_est[:, np.newaxis] + beta_est[np.newaxis, :])
+        observed_residuals = residuals[observed_mask]
+        instance.sigma_epsilon = np.std(observed_residuals, ddof=1)
+        
         instance.theta = theta_est
         instance.beta = beta_est
         instance.X_imputed = X_filled
@@ -196,6 +225,16 @@ class Estimator:
         # Imputation
         X_filled = row_means[:, np.newaxis] + col_means[np.newaxis, :] - mu
         X_filled = np.clip(X_filled, 0, 6)
+        
+        # Compute variability estimates
+        instance.std_theta = np.std(theta_est, ddof=1)
+        instance.std_beta = np.std(beta_est, ddof=1)
+        
+        # Estimate sigma_epsilon from residuals on observed values
+        observed_mask = ~np.isnan(X)
+        residuals = X - (mu + theta_est[:, np.newaxis] + beta_est[np.newaxis, :])
+        observed_residuals = residuals[observed_mask]
+        instance.sigma_epsilon = np.std(observed_residuals, ddof=1)
         
         instance.theta = theta_est
         instance.beta = beta_est
@@ -261,6 +300,16 @@ class Estimator:
         # Imputation
         X_filled = mu + theta_est[:, np.newaxis] + beta_est[np.newaxis, :]
         X_filled = np.clip(X_filled, 0, 6)
+        
+        # Compute variability estimates
+        instance.std_theta = np.std(theta_est, ddof=1)
+        instance.std_beta = np.std(beta_est, ddof=1)
+        
+        # Estimate sigma_epsilon from residuals on observed values
+        observed_mask = ~np.isnan(X)
+        residuals = X - (mu + theta_est[:, np.newaxis] + beta_est[np.newaxis, :])
+        observed_residuals = residuals[observed_mask]
+        instance.sigma_epsilon = np.std(observed_residuals, ddof=1)
         
         instance.theta = theta_est
         instance.beta = beta_est

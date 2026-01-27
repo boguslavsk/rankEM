@@ -1,16 +1,20 @@
-# rankEM Unified Student Ranking via Regularized Expectation-Maximization
+# rankEM: Unified Student Ranking via Regularized Expectation-Maximization
 
 ## 1. Introduction and Motivation
 
-In educational assessment, we frequently encounter "sparse" datasets where not every student attempts every problem. Specifically, in our context involving approximately 120 students and 24 problems, roughly 30% of the possible scores are missing. The scores range from 0 to 6 (or are binary).
+This repo is designed to solve a very simple problem: ranking students based on their performance on a set of problems, where not every student has a chance to attempt every problem.
 
-The primary challenge is that a simple average of observed scores is often an unfair metric for ranking. It implicitly assumes that all problems are equally difficult and that missing data occurs randomly. This approach fails in scenarios where students self-select problems or follow different tracks. For example, a student who scores 4.5 on exclusively "hard" problems should likely be ranked higher than a student who scores 5.0 on exclusively "easy" problems.
+In educational assessment, we frequently encounter "sparse" datasets where not every student attempts every problem. For example, this repo was motivated by the practical problem of selecting top performers out of 120 students who attended three days of exams with 8 problems given a day. Each student was expected to attend on two days of their choice out of three, but some were able to attend only one day for logistical reasons. That means that at least 33% of the possible problem scores were missing. For each problem student had a chance to attempt, they were scored on a scale from 0 to 6. The scores could be also binarised.
+
+The primary challenge is that a simple average of observed scores is often an unfair metric for ranking. It implicitly assumes that all problems are equally difficult and that missing data occurs randomly. This approach fails in scenarios where students self-select problems or follow different tracks. For example, a student who scores 4.5 on exclusively "hard" problems should likely be ranked higher than a student who scores 5.0 on exclusively "easy" problems. In our case, we could not assume neither that different days will have problems of the same average difficulty nor that the student choice of the day to attend would be uncorrelated with student ability.
 
 Our goal is to implement a unified ranking system that simultaneously estimates **Student Ability** ($\theta$) and **Problem Difficulty** ($\beta$), decoupling these latent variables to produce a fair comparison.
 
+The algorithm implemented here also estimates the full student/problem interaction matrix and works for any patterns of missing data, including non-block missing data patterns and dependencies between missing patterns and other parameters.
+
 ## 2. The Mathematical Model
 
-We model the score $X_{ij}$ of Student $i$ on Problem $j$ using a linear additive model. This is conceptually similar to a Two-Way ANOVA without interaction terms or a simplified Rasch model:
+We model the score $X_{ij}$ of Student $i$ on Problem $j$ using a simple linear additive model. This is conceptually similar to a Two-Way ANOVA without interaction terms or a simplified Rasch model:
 
 $$
 X_{ij} = \mu + \theta_i + \beta_j + \epsilon_{ij}
@@ -22,14 +26,19 @@ Where:
 * $\beta_j$: **Problem "Easiness"** (deviation from the global mean). Positive values indicate an easier problem; negative values indicate a harder one.
 * $\epsilon_{ij}$: A stochastic error term representing noise (luck, careless mistakes, etc.), assumed to follow a Gaussian distribution $\epsilon_{ij} \sim \mathcal{N}(0, \sigma^2)$. We also assume that $\epsilon_{ij}$ are independent from each other, from $\theta$, $\beta$, and from the missing data distribution.
 
-## 3. Heuristic Alternatives
+## 3. Heuristic Approaches
 
 Before employing complex iterative algorithms, it is useful to consider simpler heuristics and understand their limitations.
 
-### Method A: Simple Row Averages
+### Method A: Simple/adjusted Row Averages
 The most common approach is to rank students by the mean of their observed scores.
 * **Pros:** Simple to calculate and explain.
 * **Cons:** Highly susceptible to bias. It treats a score of 6 on a trivial problem as identical to a score of 6 on the hardest problem.
+
+An obvious improvement to this metric can be obtained by renormalising scores available for each problem or group of problems delivered simultaneously. For example, individual problem scores can be weighted inversely to the total number of points awarded to all students for that problem. When the observations are missing in day blocks, block-wise normalisation can be used.
+
+This approach can provide unbiased student ability estimates when missing data patterns are uncorrelated with problem difficulties and student abilities. However, it will break down in the presense of such correlations. For example, if strong students cluster together to attend on the same day, they will drive up the average score achieved on that day and the renormalisation will drag down the results of other students attending on the same day. 
+
 
 ### Method B: The ANOVA Heuristic (Additive Adjustment)
 We observed that simple imputation (using global means) dampens variance. A better heuristic estimates missing values using row and column marginals:
