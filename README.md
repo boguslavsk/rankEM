@@ -41,20 +41,20 @@ This approach can provide unbiased student ability estimates when missing data p
 
 
 ### Method B: The ANOVA Heuristic (Additive Adjustment)
-We observed that simple imputation (using global means) dampens variance. A better heuristic estimates missing values using row and column marginals:
+For a missing observation $X_{ij}$, natural estimators are row average $\text{RowMean}_i$, column average $\text{ColMean}_j$. We can combine them together. Given our model, a good way to combine them is to add them together and then remove the global mean that was double counted:
 
 $$
 \hat{X}_{ij} = \text{RowMean}_i + \text{ColMean}_j - \text{GlobalMean}
 $$
 
 * **Pros:** This method captures the additive nature of the model and restores the variance lost by simpler averaging methods. It is computationally instant.
-* **Cons:** This method fails under **Biased Missingness** (The "Bias Trap").
-    * *Scenario:* If "Honors" students only attempt "Hard" problems, their `RowMean` will be artificially low because they never attempted the easy problems to boost their average.
-    * *Result:* The heuristic cannot disentangle whether the student is weak or the problems were simply hard, leading to incorrect rankings.
+* **Cons:** This method fails under **Biased Missingness**.
+    * If a problem was part of a set that was not attempted by the best students, the heuristic will estimate the problem to be harder than it is. This will in turn lower the estimated ability of students who did attempt the problem, even if they performed well on it.
+    * Conversely, if a student attended days with hard problems, this heuristic will underestimate their hypothetical performance on other problems.
 
 ## 4. The Proposed Solution: Regularized EM Algorithm
 
-To solve the "Bias Trap," we employ a **Regularized Expectation-Maximization (EM)** algorithm. This method handles the circular dependency: to know a student's true ability, we must know the difficulty of the problems they skipped; to know a problem's difficulty, we must know the ability of the students who solved it.
+To solve these issues with the heuristics, we employ an **Expectation-Maximization (EM)** algorithm. This method handles the circular dependency: to know a student's true ability, we must know the difficulty of the problems they skipped; to know a problem's difficulty, we must know the ability of the students who solved it.
 
 ### The Algorithm Steps
 
@@ -88,10 +88,116 @@ The EM algorithm utilizes the entire network of connections in the data. Even if
 * **Data Structure:** A sparse matrix of size $120 \times 24$.
 * **Hyperparameters:**
     * **Regularization ($\lambda$):** We recommend a value between $1.0$ and $5.0$. This "shrinks" estimates toward the mean for students with very little data, preventing wild guesses based on noise.
-* **Validation:**
     Post-calculation, we should plot **Estimated Ability ($\theta$)** against **Raw Score (0-6)**. If the relationship is non-linear (e.g., a steeper slope between 5 and 6), the model has successfully learned that achieving a perfect score is exponentially harder than achieving a mediocre one, without requiring explicit non-linear programming.
 
-## 6. References
+## 6. Excel Add-in
+
+For users who prefer working in Excel, we provide an Excel add-in that exposes the EM and heuristic algorithms as User Defined Functions (UDFs).
+
+### Quick Start
+
+```powershell
+# Install the xlwings add-in
+.venv\Scripts\xlwings.exe addin install
+
+# Open the sample workbook
+start excel_addin\RankEM_Sample.xlsx
+```
+
+### Available Functions
+
+| Function | Description |
+|----------|-------------|
+| `=RankEM_Theta(data, "em")` | Student ability estimates (θ) |
+| `=RankEM_Beta(data, "em")` | Problem difficulty estimates (β) |
+| `=RankEM_Stats(data)` | Summary statistics |
+| `=RankEM_Ranking(data)` | Students ranked by ability |
+| `=RankEM_AllMethods(data)` | Compare all methods side-by-side |
+
+See `excel_addin/README.md` for detailed setup instructions.
+
+## 7. Running on Real Data
+
+### Usage
+
+Run the estimator on your data using the command-line interface:
+
+```bash
+python run_real_data.py <batch_name>
+```
+
+Where `<batch_name>` is the name of a subfolder under the `data/` directory containing your CSV file.
+
+### Data Format
+
+The input CSV file should have:
+- **No header row** — data starts on line 1
+- **First column**: Row labels (e.g., student IDs) — used for labeling outputs but not in calculations
+- **Remaining columns**: Numeric scores (one column per problem)
+- **Empty cells**: Treated as missing data (NaN)
+
+Example:
+```csv
+Alice,5,3,
+Bob,,4,6
+Charlie,4,,5
+```
+
+### Output Files
+
+The script generates several output files:
+
+| File | Description |
+|------|-------------|
+| `results/<batch>_analysis.md` | Comprehensive markdown report with all results |
+| `data/<batch>/theta_all_methods.csv` | Student ability estimates from all methods |
+| `data/<batch>/beta_all_methods.csv` | Problem difficulty estimates from all methods |
+
+## 8. Convergence Study Results
+
+We conducted extensive simulations to characterize the EM algorithm's convergence behavior under various conditions. The key findings are summarized below.
+
+### Study Parameters
+
+- **Matrix size**: 120 students × 24 problems (baseline 33% block-missing)
+- **Additional missing rates tested**: 0%, 10%, 20%, 30%, 40%, 50%, 60%, 70%
+- **Noise levels (σ of ε)**: 0.5, 1.5, 3.5, 6.0
+- **Regularization values (λ)**: 0, 0.1, 1.0, 5.0
+- **Runs per condition**: 50 random seeds
+
+### Key Findings
+
+| λ | Convergence | Typical Iterations | Notes |
+|---|-------------|-------------------|-------|
+| **0** (unbiased) | 98.25% success | 8–17 | Fails only at ≥73% missing; **produces unbiased estimates** |
+| **0.1** | 20% success | 8–10 (when converged) | Fails at >33% missing |
+| **1.0** | 100% success | 8–62 | Reliable across all conditions |
+| **5.0** | 100% success | 7–18 | Fastest, strongest shrinkage |
+
+#### Effect of Missing Data Rate
+
+| Total Missing | λ = 0 (unbiased) | λ = 1.0 | λ = 5.0 |
+|---------------|------------------|---------|---------|
+| 33% | 9.5 | 9.0 | 7.8 |
+| 40% | 9.7 | 44.9 | 13.8 |
+| 47% | 9.9 | 43.6 | 13.1 |
+| 54% | 10.2 | 41.1 | 12.8 |
+| 60% | 10.6 | 39.7 | 12.1 |
+| 67% | 11.3 | 37.1 | 11.3 |
+| 73% | 12.2* | 32.6 | 10.3 |
+| 80% | 14.4* | 26.4 | 8.9 |
+
+*Some non-convergence cases at these levels (28 out of 1600 runs total)
+
+### Recommendations
+
+1. **Use λ = 0 (unregularized) when possible** — produces unbiased estimates and converges reliably up to ~67% missing data
+2. **Use λ ≥ 1.0** when missing rate exceeds 70% or guaranteed convergence is required
+3. **Noise level (σ) has minimal impact** on convergence — the algorithm is robust across σ = 0.5 to 6.0
+4. **Missing data up to 67%** is handled well even without regularization
+5. For very sparse data (>70% missing), **λ = 1.0** offers a good balance between bias and convergence
+
+## 9. References
 
 * **Dempster, A. P., Laird, N. M., & Rubin, D. B. (1977).** *Maximum likelihood from incomplete data via the EM algorithm.* (The foundational paper).
 * **Koren, Y., Bell, R., & Volinsky, C. (2009).** *Matrix Factorization Techniques for Recommender Systems.* (Describes similar techniques used for filling sparse matrices in the Netflix Prize).
