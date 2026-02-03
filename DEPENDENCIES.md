@@ -10,14 +10,13 @@ These packages should be installed via `pip`.
 | **numpy** | Numerical operations, array handling, linear algebra (lstsq) | core, experiments, add-in |
 | **pandas** | Data loading (CSV/Excel), dataframes, analysis | core, experiments |
 | **scipy** | Scientific computing (Spearman rank correlation) | experiments |
-| **xlwings** | Excel add-in integration | excel_addin |
 | **openpyxl** | Excel file I/O (backend for pandas `read_excel`) | experiments (data_generator) |
 
 ### Installation
 To install all required external dependencies, run:
 
 ```bash
-pip install numpy pandas scipy xlwings openpyxl
+pip install numpy pandas scipy openpyxl
 ```
 
 ## Standard Library Modules
@@ -40,6 +39,4 @@ The project uses the following internal modules:
   - **data_generator.py**: `DataGenerator` class for simulations.
   - **run_experiments.py**: Main experiment runner.
   - **monitor/** & **analyze/** scripts: Various analysis tools.
-- **excel_addin/**:
-  - **rankEM_functions.py**: User-defined functions (UDFs) exposed to Excel.
-  - **install.py**: script to install the bindings.
+
