@@ -52,6 +52,14 @@ $$
     * If a problem was part of a set that was not attempted by the best students, the heuristic will estimate the problem to be harder than it is. This will in turn lower the estimated ability of students who did attempt the problem, even if they performed well on it.
     * Conversely, if a student attended days with hard problems, this heuristic will underestimate their hypothetical performance on other problems.
 
+### Method C: The Chain-Linking Heuristic
+This method explicitly models the group structure of the data. It assumes students are divided into groups (cohorts) and problems are checked in blocks (days). 
+* It calculates the mean score for each group on each day block.
+* It sets up a linear system where `Mean_gd = GroupEffect_g + DayEffect_d`.
+* Solving this system (with constraints) provides estimates for group abilities and day difficulties.
+* **Pros:** Can disentangle student ability from problem difficulty better than simple averages when the block structure is known. It actually works on par with the EM algorithm and gives the same results for our particular case when missing patterns are simple and uniform across students.
+* **Cons:** Requires explicit knowledge of the group/block structure. May fail if there's no overlap between groups and days (disconnected graph). Will become very noisy for small groups and complex missing data patterns.
+
 ## 4. The Proposed Solution: Regularized EM Algorithm
 
 To solve these issues with the heuristics, we employ an **Expectation-Maximization (EM)** algorithm. This method handles the circular dependency: to know a student's true ability, we must know the difficulty of the problems they skipped; to know a problem's difficulty, we must know the ability of the students who solved it.
@@ -65,10 +73,19 @@ To solve these issues with the heuristics, we employ an **Expectation-Maximizati
     Calculate the parameters $\theta_i$ and $\beta_j$ that minimize the prediction error on the *observed* data. We apply **Regularization** (Ridge/L2 penalty) to handle the error term $\epsilon$ and prevent overfitting on students with few data points.
 
 $$
-    \theta_i = \frac{\sum_{j \in \text{Observed}} (X_{ij} - \mu - \beta_j)}{N_i + \lambda}
+    \theta_i = \frac{\sum_{j \in \text{Observed}} (X_{ij} - \mu - \beta_j)}{N_i + \lambda_\theta}
 $$
 
-Where $N_i$ is the count of problems student $i$ solved, and $\lambda$ is the regularization term.
+Where $N_i$ is the count of problems student $i$ solved, and $\lambda_\theta$ is the regularization term for student ability.
+
+3.  **M-Step (continued):**
+    Similarly, update the problem difficulty parameters $\beta_j$:
+
+    $$
+        \beta_j = \frac{\sum_{i \in \text{Observed}} (X_{ij} - \mu - \theta_i)}{M_j + \lambda_\beta}
+    $$
+
+    Where $M_j$ is the count of students who attempted problem $j$, and $\lambda_\beta$ is the regularization term for problem difficulty.
 
 4.  **E-Step (Expectation/Imputation):**
     Update the values for the missing entries based on the newly estimated parameters:
@@ -78,7 +95,7 @@ $$
 $$
 
 5.  **Convergence:**
-    Repeat steps 2 and 3 until the parameters stabilize (change $< 10^{-4}$).
+    Repeat steps 2 and 3 until the parameters stabilize (change $< 10^{-4}$) or the maximum number of iterations is reached .
 
 ### Why EM Outperforms Heuristics
 The EM algorithm utilizes the entire network of connections in the data. Even if Student A and Student B never solved the same problem, they are linked through Student C, who solved problems common to both. This allows information to "flow" through the matrix, correcting the rankings even in the "Bias Trap" scenario where heuristics fail.
@@ -87,36 +104,11 @@ The EM algorithm utilizes the entire network of connections in the data. Even if
 
 * **Data Structure:** A sparse matrix of size $120 \times 24$.
 * **Hyperparameters:**
-    * **Regularization ($\lambda$):** We recommend a value between $1.0$ and $5.0$. This "shrinks" estimates toward the mean for students with very little data, preventing wild guesses based on noise.
-    Post-calculation, we should plot **Estimated Ability ($\theta$)** against **Raw Score (0-6)**. If the relationship is non-linear (e.g., a steeper slope between 5 and 6), the model has successfully learned that achieving a perfect score is exponentially harder than achieving a mediocre one, without requiring explicit non-linear programming.
+    * **Regularization ($\lambda_\theta, \lambda_\beta$):** For moderate share of missing data (up to 50%) and realistic signal-to-noise ratio in problem resutls, the algorithm converges fine without regularisation. For higher share of missing data, we recommend increasing the regularization parameters.
 
-## 6. Excel Add-in
 
-For users who prefer working in Excel, we provide an Excel add-in that exposes the EM and heuristic algorithms as User Defined Functions (UDFs).
 
-### Quick Start
-
-```powershell
-# Install the xlwings add-in
-.venv\Scripts\xlwings.exe addin install
-
-# Open the sample workbook
-start excel_addin\RankEM_Sample.xlsx
-```
-
-### Available Functions
-
-| Function | Description |
-|----------|-------------|
-| `=RankEM_Theta(data, "em")` | Student ability estimates (θ) |
-| `=RankEM_Beta(data, "em")` | Problem difficulty estimates (β) |
-| `=RankEM_Stats(data)` | Summary statistics |
-| `=RankEM_Ranking(data)` | Students ranked by ability |
-| `=RankEM_AllMethods(data)` | Compare all methods side-by-side |
-
-See `excel_addin/README.md` for detailed setup instructions.
-
-## 7. Running on Real Data
+## 7. Using on Real Data
 
 ### Usage
 
@@ -172,7 +164,7 @@ We conducted extensive simulations to characterize the EM algorithm's convergenc
 | **0** (unbiased) | 98.25% success | 8–17 | Fails only at ≥73% missing; **produces unbiased estimates** |
 | **0.1** | 20% success | 8–10 (when converged) | Fails at >33% missing |
 | **1.0** | 100% success | 8–62 | Reliable across all conditions |
-| **5.0** | 100% success | 7–18 | Fastest, strongest shrinkage |
+| **5.0** | 100% success | 7–18 | Fastest, strongest shrinkage, biased estimates |
 
 #### Effect of Missing Data Rate
 

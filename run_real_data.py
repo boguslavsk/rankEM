@@ -277,7 +277,7 @@ def save_all_estimates_to_csv(results: dict, data_dir: Path, student_hashes: lis
     Args:
         results: Dictionary of method_name -> Estimator
         data_dir: Directory to save files
-        student_hashes: Optional list of student hash values for theta estimates
+        student_hashes: Optional list of student ids or hash values for theta estimates
     """
     # Build theta DataFrame with all methods as columns
     if student_hashes is not None:
@@ -314,7 +314,7 @@ def main():
         epilog='''
 Input File Requirements:
   The specified folder MUST contain a file named 'input.csv' with the following format:
-  - First column: Student hash values (hex strings without quotes)
+  - First column: Student id or hash values 
   - Remaining columns: Score matrix (X)
   - No headers
   - Empty cells are treated as missing data
