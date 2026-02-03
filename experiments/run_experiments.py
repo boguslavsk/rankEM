@@ -1,6 +1,20 @@
 """
 Comprehensive experiment suite for evaluating estimators under different conditions.
+
+NOTE: This script expects to be run from the project root directory, or it will
+change to the project root automatically.
 """
+
+import os
+import sys
+from pathlib import Path
+
+# Add parent directory (for estimator) and current directory (for data_generator) to path
+PROJECT_ROOT = Path(__file__).parent.parent
+EXPERIMENTS_DIR = Path(__file__).parent
+sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(EXPERIMENTS_DIR))
+os.chdir(PROJECT_ROOT)
 
 import numpy as np
 from scipy.stats import spearmanr
@@ -86,11 +100,13 @@ def run_experiments(output_file: str = 'results/experiment_results.csv'):
                     for est_name in estimator_names:
                         # Run estimator
                         if est_name == 'EM':
-                            est = Estimator.em(X_miss, lambda_theta=0.0, lambda_beta=0.0)
+                            est = Estimator.em(X_miss, lambda_theta=0.0, lambda_beta=0.0,
+                                               min_mark=0., max_mark=6.)
                         elif est_name == 'DayAvg':
-                            est = Estimator.day_average(X_miss, n_blocks=n_blocks)
+                            est = Estimator.day_average(X_miss, n_blocks=n_blocks,
+                                                        min_mark=0., max_mark=6.)
                         else:  # 'Imp'
-                            est = Estimator.mean_imputation(X_miss)
+                            est = Estimator.mean_imputation(X_miss, min_mark=0., max_mark=6.)
                         
                         theta_est = est.theta
                         beta_est = est.beta
@@ -235,7 +251,8 @@ def run_regularization_experiment(output_file: str = 'results/regularization_res
                 
                 for lam in lambdas:
                     # Run EM with this lambda (same for theta and beta)
-                    est = Estimator.em(X_miss, lambda_theta=lam, lambda_beta=lam)
+                    est = Estimator.em(X_miss, lambda_theta=lam, lambda_beta=lam,
+                                       min_mark=0., max_mark=6.)
                     
                     theta_est = est.theta
                     beta_est = est.beta
@@ -418,7 +435,8 @@ def run_missing_rate_experiment(sigma: float = 3.5,
                 
                 for lam in lambdas:
                     # Run EM with this lambda
-                    est = Estimator.em(X_miss, lambda_theta=lam, lambda_beta=lam)
+                    est = Estimator.em(X_miss, lambda_theta=lam, lambda_beta=lam,
+                                       min_mark=0., max_mark=6.)
                     
                     theta_est = est.theta
                     beta_est = est.beta
@@ -1054,7 +1072,8 @@ def run_convergence_study(output_file: str = 'results/convergence_study.csv'):
                     total_missing_rate = dg.missing_rate_actual
                     
                     # Run EM with no regularization to get true convergence behavior
-                    est = Estimator.em(X_miss, lambda_theta=0.0, lambda_beta=0.0)
+                    est = Estimator.em(X_miss, lambda_theta=0.0, lambda_beta=0.0,
+                                       min_mark=0., max_mark=6.)
                     
                     # Write row
                     row = {

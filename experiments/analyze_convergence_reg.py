@@ -1,4 +1,13 @@
-"""Simple analysis of regularized convergence study."""
+"""Simple analysis of regularized convergence study.
+
+NOTE: Run from project root directory.
+"""
+import os
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).parent.parent
+os.chdir(PROJECT_ROOT)
+
 import pandas as pd
 
 df = pd.read_csv('results/convergence_study_regularized.csv')

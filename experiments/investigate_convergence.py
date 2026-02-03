@@ -1,4 +1,17 @@
-"""Investigate why lam=0.1 has higher non-convergence than lam=0."""
+"""Investigate why lam=0.1 has higher non-convergence than lam=0.
+
+NOTE: Run from project root directory.
+"""
+import os
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).parent.parent
+EXPERIMENTS_DIR = Path(__file__).parent
+sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(EXPERIMENTS_DIR))
+os.chdir(PROJECT_ROOT)
+
 import pandas as pd
 import numpy as np
 

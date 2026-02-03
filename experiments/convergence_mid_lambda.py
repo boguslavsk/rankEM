@@ -1,7 +1,19 @@
 """
 Convergence study with intermediate regularization parameters.
 Tests lambda values: 0.25, 0.5, 0.75
+
+NOTE: Run from project root directory.
 """
+import os
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).parent.parent
+EXPERIMENTS_DIR = Path(__file__).parent
+sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(EXPERIMENTS_DIR))
+os.chdir(PROJECT_ROOT)
+
 import numpy as np
 import csv
 import pandas as pd
@@ -52,7 +64,8 @@ def run_study():
                     total_missing_rate = dg.missing_rate_actual
                     
                     for lam in lambdas:
-                        est = Estimator.em(X_miss, lambda_theta=lam, lambda_beta=lam)
+                        est = Estimator.em(X_miss, lambda_theta=lam, lambda_beta=lam,
+                                           min_mark=0., max_mark=6.)
                         
                         row = {
                             'seed': seed,

@@ -1,6 +1,15 @@
-"""Analyze and print convergence study results."""
-import pandas as pd
+"""Analyze and print convergence study results.
+
+NOTE: Run from project root directory.
+"""
+import os
 import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).parent.parent
+os.chdir(PROJECT_ROOT)
+
+import pandas as pd
 
 df = pd.read_csv('results/convergence_study.csv')
 
