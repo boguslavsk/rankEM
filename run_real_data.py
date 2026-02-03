@@ -338,6 +338,11 @@ def main():
     row_labels, X = load_csv_data(str(csv_file))
     print(f"Data shape: {X.shape} (students × problems)")
     
+    # Compute min/max marks from observed data (for clipping imputed values)
+    min_mark = np.nanmin(X)
+    max_mark = np.nanmax(X)
+    print(f"Score range: [{min_mark:.1f}, {max_mark:.1f}]")
+    
     # Compute missing data statistics
     missing_stats = compute_missing_stats(X)
     print(f"Missing rate: {missing_stats['missing_rate']:.2%}")
@@ -348,7 +353,8 @@ def main():
     
     # 1. EM Estimator
     print("Running EM Estimator...")
-    em_est = Estimator.em(X, lambda_theta=1.0, lambda_beta=1.0)
+    em_est = Estimator.em(X, lambda_theta=1.0, lambda_beta=1.0, 
+                          min_mark=min_mark, max_mark=max_mark)
     results['EM Estimator'] = em_est
     print(f"  Converged in {em_est.n_iterations} iterations")
     print(f"  σ(ε) = {em_est.sigma_epsilon:.4f}")
@@ -356,14 +362,14 @@ def main():
     
     # 2. Mean Imputation Heuristic
     print("Running Mean Imputation...")
-    imp_est = Estimator.mean_imputation(X)
+    imp_est = Estimator.mean_imputation(X, min_mark=min_mark, max_mark=max_mark)
     results['Mean Imputation'] = imp_est
     print(f"  σ(ε) = {imp_est.sigma_epsilon:.4f}")
     print()
     
     # 3. Day Average Heuristic
     print("Running Day Average...")
-    day_est = Estimator.day_average(X, n_blocks=3)
+    day_est = Estimator.day_average(X, n_blocks=3, min_mark=min_mark, max_mark=max_mark)
     results['Day Average'] = day_est
     print(f"  σ(ε) = {day_est.sigma_epsilon:.4f}")
     print()

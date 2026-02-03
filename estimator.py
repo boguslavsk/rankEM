@@ -30,9 +30,46 @@ class Estimator:
         self.sigma_epsilon: Optional[float] = None
         self.n_iterations: Optional[int] = None
     
+    def _finalize_estimates(self, X: np.ndarray, theta: np.ndarray, beta: np.ndarray, 
+                            mu: float, clip_min: float = -np.inf, clip_max: float = np.inf) -> None:
+        """
+        A common routine for all estimators.
+
+        Finalize estimation by computing imputed matrix, variability estimates,
+        and storing all results on the instance.
+        
+        Args:
+            X: Original score matrix with NaN for missing values (used for residual calculation)
+            theta: Estimated student abilities
+            beta: Estimated problem difficulties
+            mu: Global mean
+            clip_min: Minimum value for clipping imputed values (default: -inf, no clipping)
+            clip_max: Maximum value for clipping imputed values (default: inf, no clipping)
+        """
+        # Compute imputed matrix
+        X_filled = mu + theta[:, np.newaxis] + beta[np.newaxis, :]
+        X_filled = np.clip(X_filled, clip_min, clip_max)
+        
+        # Compute variability estimates
+        self.std_theta = np.std(theta, ddof=1)
+        self.std_beta = np.std(beta, ddof=1)
+        
+        # Estimate sigma_epsilon from residuals on observed values
+        observed_mask = ~np.isnan(X)
+        residuals = X - (mu + theta[:, np.newaxis] + beta[np.newaxis, :])
+        observed_residuals = residuals[observed_mask]
+        self.sigma_epsilon = np.std(observed_residuals, ddof=1)
+        
+        # Store results
+        self.theta = theta
+        self.beta = beta
+        self.X_imputed = X_filled
+        self.mu = mu
+    
     @classmethod
-    def em(cls, X: np.ndarray, lambda_theta: float = 1.0, lambda_beta: float = 1.0,
-           max_iter: int = 100, tol: float = 1e-4) -> 'Estimator':
+    def em(cls, X: np.ndarray, lambda_theta: float = 0.0, lambda_beta: float = 0.0,
+           max_iter: int = 100, tol: float = 1e-4,
+           min_mark: float = -np.inf, max_mark: float = np.inf) -> 'Estimator':
         """
         Regularized EM (Alternating Least Squares) algorithm with L2 penalties.
         
@@ -42,10 +79,12 @@ class Estimator:
         
         Args:
             X: Score matrix with NaN for missing values
-            lambda_theta: L2 regularization parameter for theta (student abilities)
-            lambda_beta: L2 regularization parameter for beta (problem difficulties)
+            lambda_theta: L2 regularization parameter for theta (student abilities), default: 0. (no regularisation)
+            lambda_beta: L2 regularization parameter for beta (problem difficulties), default: 0. (no regularisation)
             max_iter: Maximum iterations
-            tol: Convergence tolerance
+            tol: Convergence tolerance (minimuum combined absolute change in theta and beta over 1 iteration)
+            min_mark: Minimum possible score (used to clip imputed values)
+            max_mark: Maximum possible score (used to clip imputed values)
             
         Returns:
             Estimator with fitted parameters
@@ -88,28 +127,14 @@ class Estimator:
         # Store iteration count
         instance.n_iterations = iteration + 1
         
-        # Final imputation
-        X_filled = mu + theta[:, np.newaxis] + beta[np.newaxis, :]
-        X_filled = np.clip(X_filled, 0, 6)
-        
-        # Compute variability estimates
-        instance.std_theta = np.std(theta, ddof=1)
-        instance.std_beta = np.std(beta, ddof=1)
-        
-        # Estimate sigma_epsilon from residuals on observed values
-        residuals = X_work - (mu + theta[:, np.newaxis] + beta[np.newaxis, :])
-        observed_residuals = residuals[observed_mask]
-        instance.sigma_epsilon = np.std(observed_residuals, ddof=1)
-        
-        instance.theta = theta
-        instance.beta = beta
-        instance.X_imputed = X_filled
-        instance.mu = mu
+        # Finalize estimates
+        instance._finalize_estimates(X, theta, beta, mu, clip_min=min_mark, clip_max=max_mark)
         
         return instance
     
     @classmethod
-    def chain_linking(cls, X: np.ndarray, groups: List[np.ndarray]) -> 'Estimator':
+    def chain_linking(cls, X: np.ndarray, groups: List[np.ndarray],
+                      min_mark: float = -np.inf, max_mark: float = np.inf) -> 'Estimator':
         """
         Chain-linking heuristic estimator.
         
@@ -120,6 +145,8 @@ class Estimator:
         Args:
             X: Score matrix with NaN for missing values
             groups: List of arrays, each containing student indices for a group
+            min_mark: Minimum possible score (used to clip imputed values)
+            max_mark: Maximum possible score (used to clip imputed values)
             
         Returns:
             Estimator with fitted parameters
@@ -179,28 +206,14 @@ class Estimator:
             if valid_vals:
                 theta_est[i] = np.mean(valid_vals)
         
-        # Imputation
-        X_filled = theta_est[:, np.newaxis] + beta_est[np.newaxis, :]
-        X_filled = np.clip(X_filled, 0, 6)
-        
-        # Compute variability estimates
-        instance.std_theta = np.std(theta_est, ddof=1)
-        instance.std_beta = np.std(beta_est, ddof=1)
-        
-        # Estimate sigma_epsilon from residuals on observed values
-        observed_mask = ~np.isnan(X)
-        residuals = X - (theta_est[:, np.newaxis] + beta_est[np.newaxis, :])
-        observed_residuals = residuals[observed_mask]
-        instance.sigma_epsilon = np.std(observed_residuals, ddof=1)
-        
-        instance.theta = theta_est
-        instance.beta = beta_est
-        instance.X_imputed = X_filled
+        # Finalize estimates (chain_linking has no global mean, so mu=0)
+        instance._finalize_estimates(X, theta_est, beta_est, mu=0.0, clip_min=min_mark, clip_max=max_mark)
         
         return instance
     
     @classmethod
-    def mean_imputation(cls, X: np.ndarray) -> 'Estimator':
+    def mean_imputation(cls, X: np.ndarray,
+                        min_mark: float = -np.inf, max_mark: float = np.inf) -> 'Estimator':
         """
         Additive mean imputation heuristic.
         
@@ -208,6 +221,8 @@ class Estimator:
         
         Args:
             X: Score matrix with NaN for missing values
+            min_mark: Minimum possible score (used to clip imputed values)
+            max_mark: Maximum possible score (used to clip imputed values)
             
         Returns:
             Estimator with fitted parameters
@@ -222,29 +237,14 @@ class Estimator:
         theta_est = row_means - mu
         beta_est = col_means - mu
         
-        # Imputation
-        X_filled = row_means[:, np.newaxis] + col_means[np.newaxis, :] - mu
-        X_filled = np.clip(X_filled, 0, 6)
-        
-        # Compute variability estimates
-        instance.std_theta = np.std(theta_est, ddof=1)
-        instance.std_beta = np.std(beta_est, ddof=1)
-        
-        # Estimate sigma_epsilon from residuals on observed values
-        observed_mask = ~np.isnan(X)
-        residuals = X - (mu + theta_est[:, np.newaxis] + beta_est[np.newaxis, :])
-        observed_residuals = residuals[observed_mask]
-        instance.sigma_epsilon = np.std(observed_residuals, ddof=1)
-        
-        instance.theta = theta_est
-        instance.beta = beta_est
-        instance.X_imputed = X_filled
-        instance.mu = mu
+        # Finalize estimates
+        instance._finalize_estimates(X, theta_est, beta_est, mu, clip_min=min_mark, clip_max=max_mark)
         
         return instance
     
     @classmethod
-    def day_average(cls, X: np.ndarray, n_blocks: int = 3) -> 'Estimator':
+    def day_average(cls, X: np.ndarray, n_blocks: int = 3,
+                    min_mark: float = -np.inf, max_mark: float = np.inf) -> 'Estimator':
         """
         Day-average heuristic estimator.
         
@@ -258,6 +258,8 @@ class Estimator:
         Args:
             X: Score matrix with NaN for missing values
             n_blocks: Number of day blocks (default 3)
+            min_mark: Minimum possible score (used to clip imputed values)
+            max_mark: Maximum possible score (used to clip imputed values)
             
         Returns:
             Estimator with fitted parameters
@@ -297,23 +299,7 @@ class Estimator:
         # Theta: mean rescaled score for each student (relative to global mean)
         theta_est = np.nanmean(X_rescaled, axis=1) - mu
         
-        # Imputation
-        X_filled = mu + theta_est[:, np.newaxis] + beta_est[np.newaxis, :]
-        X_filled = np.clip(X_filled, 0, 6)
-        
-        # Compute variability estimates
-        instance.std_theta = np.std(theta_est, ddof=1)
-        instance.std_beta = np.std(beta_est, ddof=1)
-        
-        # Estimate sigma_epsilon from residuals on observed values
-        observed_mask = ~np.isnan(X)
-        residuals = X - (mu + theta_est[:, np.newaxis] + beta_est[np.newaxis, :])
-        observed_residuals = residuals[observed_mask]
-        instance.sigma_epsilon = np.std(observed_residuals, ddof=1)
-        
-        instance.theta = theta_est
-        instance.beta = beta_est
-        instance.X_imputed = X_filled
-        instance.mu = mu
+        # Finalize estimates
+        instance._finalize_estimates(X, theta_est, beta_est, mu, clip_min=min_mark, clip_max=max_mark)
         
         return instance
