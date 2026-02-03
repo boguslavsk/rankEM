@@ -81,11 +81,11 @@ Where $N_i$ is the count of problems student $i$ solved, and $\lambda_\theta$ is
 3.  **M-Step (continued):**
     Similarly, update the problem difficulty parameters $\beta_j$:
 
-    $$
-        \beta_j = \frac{\sum_{i \in \text{Observed}} (X_{ij} - \mu - \theta_i)}{M_j + \lambda_\beta}
-    $$
+$$
+   \beta_j = \frac{\sum_{i \in \text{Observed}} (X_{ij} - \mu - \theta_i)}{M_j + \lambda_\beta}
+$$
 
-    Where $M_j$ is the count of students who attempted problem $j$, and $\lambda_\beta$ is the regularization term for problem difficulty.
+Where $M_j$ is the count of students who attempted problem $j$, and $\lambda_\beta$ is the regularization term for problem difficulty.
 
 4.  **E-Step (Expectation/Imputation):**
     Update the values for the missing entries based on the newly estimated parameters:
