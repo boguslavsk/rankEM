@@ -14,27 +14,28 @@ def load_csv_data(filepath: str) -> tuple[list[str], np.ndarray]:
     """
     Load score matrix from CSV file.
     
-    The first column contains row labels (ignored in processing but used for output).
+    The first column contains student hash values (as hex strings without quotes).
+    Remaining columns form the X matrix. No headers are expected.
     Empty cells are treated as missing data (NaN).
     
     Args:
         filepath: Path to CSV file
         
     Returns:
-        Tuple of (row_labels, score_matrix) where:
-        - row_labels: List of strings from the first column
+        Tuple of (student_hashes, score_matrix) where:
+        - student_hashes: List of hex string hash values from the first column
         - score_matrix: numpy array with NaN for missing values
     """
-    # Read CSV, treating empty strings as NaN
-    df = pd.read_csv(filepath, header=None, na_values=['', ' '])
+    # Read CSV without headers, treating empty strings as NaN
+    df = pd.read_csv(filepath, header=None, na_values=['', ' '], dtype={0:str})
     
-    # Extract first column as row labels
-    row_labels = df.iloc[:, 0].astype(str).tolist()
+    # Extract first column as student hash values
+    student_hashes = df.iloc[:, 0].tolist()
     
     # Extract remaining columns as data matrix
     X = df.iloc[:, 1:].values.astype(float)
     
-    return row_labels, X
+    return student_hashes, X
 
 
 def compute_missing_stats(X: np.ndarray) -> dict:
@@ -269,18 +270,18 @@ def generate_report(X: np.ndarray,
 
 
 
-def save_all_estimates_to_csv(results: dict, data_dir: Path, row_labels: list[str] = None):
+def save_all_estimates_to_csv(results: dict, data_dir: Path, student_hashes: list[str] = None):
     """
     Save all theta and beta estimates from all methods to consolidated CSV files.
     
     Args:
         results: Dictionary of method_name -> Estimator
         data_dir: Directory to save files
-        row_labels: Optional list of row labels for theta estimates
+        student_hashes: Optional list of student hash values for theta estimates
     """
     # Build theta DataFrame with all methods as columns
-    if row_labels is not None:
-        theta_data = {'row_label': row_labels}
+    if student_hashes is not None:
+        theta_data = {'student_hash': student_hashes}
     else:
         theta_data = {'student_id': range(1, len(list(results.values())[0].theta) + 1)}
     for method_name, est in results.items():
@@ -308,34 +309,53 @@ def save_all_estimates_to_csv(results: dict, data_dir: Path, row_labels: list[st
 def main():
     """Main entry point."""
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Run estimators on real data batch')
-    parser.add_argument('batch', type=str, help='Batch name (subfolder under data/)')
+    parser = argparse.ArgumentParser(
+        description='Run EM and heuristic estimators on real assessment data',
+        epilog='''
+Input File Requirements:
+  The specified folder MUST contain a file named 'input.csv' with the following format:
+  - First column: Student hash values (hex strings without quotes)
+  - Remaining columns: Score matrix (X)
+  - No headers
+  - Empty cells are treated as missing data
+  
+  Example:
+    abc123,5.2,7.1,,4.5
+    def456,6.0,,8.2,5.1
+    
+Output:
+  - Analysis report: <folder>/analysis.md
+  - Theta estimates: <folder>/theta_all_methods.csv
+  - Beta estimates: <folder>/beta_all_methods.csv
+        ''',
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument('folder', type=str, 
+                       help='Path to folder containing input.csv file')
     args = parser.parse_args()
     
-    batch_name = args.batch
-    
     # Setup paths
-    data_dir = Path('data') / batch_name
+    data_dir = Path(args.folder)
     if not data_dir.exists():
-        print(f"Error: Batch directory not found: {data_dir}")
+        print(f"Error: Folder not found: {data_dir}")
         return
     
-    results_dir = Path('results')
-    results_dir.mkdir(exist_ok=True)
-    
-    # Find CSV file (exclude estimate files we generate)
-    csv_files = [f for f in data_dir.glob('*.csv') 
-                 if not any(x in f.name for x in ['estimates', 'theta_', 'beta_', 'parameter_', 'all_methods'])]
-    if not csv_files:
-        print(f"No CSV files found in {data_dir}/ directory")
+    # Look for input.csv file
+    csv_file = data_dir / 'input.csv'
+    if not csv_file.exists():
+        print(f"Error: input.csv not found in {data_dir}")
         return
+
     
-    csv_file = csv_files[0]
-    print(f"Processing batch: {batch_name}")
+    # Extract folder name for output files
+    folder_name = data_dir.name
+    
+    print(f"Processing folder: {data_dir}")
     print(f"Loading data from: {csv_file}")
     
     # Load data
-    row_labels, X = load_csv_data(str(csv_file))
+    student_hashes, X = load_csv_data(str(csv_file))
+    print(f"Loaded {len(student_hashes)} student hashes")
     print(f"Data shape: {X.shape} (students × problems)")
     
     # Compute min/max marks from observed data (for clipping imputed values)
@@ -374,13 +394,13 @@ def main():
     print(f"  σ(ε) = {day_est.sigma_epsilon:.4f}")
     print()
     
-    # Generate report (batch-specific filename)
-    report_file = results_dir / f'{batch_name}_analysis.md'
+    # Generate report in the same folder as other outputs
+    report_file = data_dir / 'analysis.md'
     generate_report(X, results, missing_stats, str(report_file))
     
     # Save consolidated files with all methods as columns
     print()
-    save_all_estimates_to_csv(results, data_dir, row_labels)
+    save_all_estimates_to_csv(results, data_dir, student_hashes)
     
     # Print summary to console
     print("=" * 70)
