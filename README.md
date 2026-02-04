@@ -141,9 +141,9 @@ The script generates several output files:
 
 | File | Description |
 |------|-------------|
-| `results/<batch>_analysis.md` | Comprehensive markdown report with all results |
-| `data/<batch>/theta_all_methods.csv` | Student ability estimates from all methods |
-| `data/<batch>/beta_all_methods.csv` | Problem difficulty estimates from all methods |
+| `<batch>/_analysis.md` | Comprehensive markdown report with all results |
+| `<batch>/theta_all_methods.csv` | Student ability estimates from all methods |
+| `<batch>/beta_all_methods.csv` | Problem difficulty estimates from all methods |
 
 ## 8. Convergence Study Results
 
